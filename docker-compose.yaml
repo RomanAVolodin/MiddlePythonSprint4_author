@@ -1,0 +1,55 @@
+services:
+  search_service:
+    build:
+      context: .
+    restart: always
+    ports:
+      - "8000:8000"
+    expose:
+      - "8000"
+    volumes:
+      - ./src:/opt/app
+    env_file:
+      - ./.env
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  restore_dump:
+    image: curlimages/curl
+    depends_on:
+      elastic_search:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - |
+        curl -X PUT http://elastic_search:9200/_snapshot/backup -H "Content-Type: application/json" -d '{"type": "fs","settings": {"location": "/opt/elasticsearch/backup","compress": true}}'
+        curl -X POST 'http://elastic_search:9200/_snapshot/backup/initial_dump/_restore'
+
+  elastic_search:
+    image: elasticsearch:8.6.2
+    ports:
+      - "9200:9200"
+    expose:
+      - "9200"
+    volumes:
+      - ./backups:/opt/elasticsearch/backup
+    healthcheck:
+      test: curl -s http://elastic_search:9200 >/dev/null || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 50
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - path.repo=/opt/elasticsearch/backup
+
+  redis:
+    image: redis
+    restart: always
+    expose:
+      - "6379"
+
+
