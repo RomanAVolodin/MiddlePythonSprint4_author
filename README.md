@@ -1,1 +1,1 @@
-# MiddlePythonSprint4_author
+# Перед началом работы не забудьте переименовать `env.sample` в `.env`
