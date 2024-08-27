@@ -3,21 +3,21 @@ import logging
 from functools import lru_cache
 from uuid import UUID
 
-from elasticsearch import AsyncElasticsearch, NotFoundError
-from fastapi import Depends
-from redis import Redis
-
 from core.config import FILM_CACHE_EXPIRE_IN_SECONDS
-from db.cache_service import get_cache_service
-from db.full_text_search_service import get_full_text_search
+from db.cache_service import ICacheService, get_cache_service
+from db.full_text_search_service import IFullTextSearchService, get_full_text_search
+from elasticsearch import NotFoundError
 from models.film import CustomJSONEncoder, Film, Genre
+from services.interfaces.interface_film_service import IFilmService
+
+from fastapi import Depends
 
 from .base import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class FilmService(BaseService):
+class FilmService(BaseService, IFilmService):
     async def get_by_id(self, film_id: str) -> Film | None:
         cache_key = f'film:{film_id}'
         cached_film = await self.cache_service.get(cache_key)
@@ -87,7 +87,7 @@ class FilmService(BaseService):
         try:
             response = await self.fts_service.search(index='movies', body=search_body)
         except NotFoundError as e:
-            logger.info('Error retrieving film from Elasticsearch: %s', e)
+            logger.error(f'Error retrieving films from Elasticsearch: {e}')
             return []
         films = [Film(**doc['_source']) for doc in response['hits']['hits']]
 
@@ -109,14 +109,14 @@ class FilmService(BaseService):
         try:
             doc = await self.fts_service.get(index='movies', id=film_id)
         except NotFoundError as e:
-            logger.info('Error retrieving film from Elasticsearch: %s', e)
+            logger.info(f'Error retrieving film from Elasticsearch: {e}')
             return None
         return Film(**doc['_source'])
 
 
 @lru_cache()
 def get_film_service(
-    cache_service: Redis = Depends(get_cache_service),
-    fts_service: AsyncElasticsearch = Depends(get_full_text_search),
-) -> FilmService:
+    cache_service: ICacheService = Depends(get_cache_service),
+    fts_service: IFullTextSearchService = Depends(get_full_text_search),
+) -> IFilmService:
     return FilmService(cache_service, fts_service)

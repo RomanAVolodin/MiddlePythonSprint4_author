@@ -2,23 +2,23 @@ import json
 import logging
 from functools import lru_cache
 
-from elasticsearch import AsyncElasticsearch, NotFoundError
-from fastapi import Depends
-from pydantic import UUID4
-from redis import Redis
-
 from core.config import PERSON_CACHE_EXPIRE_IN_SECONDS
-from db.cache_service import get_cache_service
-from db.full_text_search_service import get_full_text_search
+from db.cache_service import ICacheService, get_cache_service
+from db.full_text_search_service import IFullTextSearchService, get_full_text_search
+from elasticsearch import NotFoundError
 from models.film import CustomJSONEncoder
 from models.persons import FilmRoles, Person, PersonFilm
+from pydantic import UUID4
+from services.interfaces.interface_person_service import IPersonService
+
+from fastapi import Depends
 
 from .base import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class PersonService(BaseService):
+class PersonService(BaseService, IPersonService):
     async def get_by_id(self, person_id: UUID4) -> Person | None:
         cache_key = f'person:{person_id}'
         cached_person = await self.cache_service.get(cache_key)
@@ -29,14 +29,13 @@ class PersonService(BaseService):
         try:
             person_res = await self.fts_service.get(index='persons', id=person_id)
         except NotFoundError as e:
-            logger.info('Error retrieving person from Elasticsearch: %s', e)
+            logger.info(f'Error retrieving person from Elasticsearch: {e}')
             return None
         person_data = person_res['_source']
 
         films_search_results = await self.get_film_search_by_person_id(person_id)
         person_films = await self.get_person_films(person_id, films_search_results)
 
-        # Добавление информации о персоне в список персон
         person = Person(
             **{
                 'uuid': person_data['id'],
@@ -58,14 +57,12 @@ class PersonService(BaseService):
             film_data = film_hit['_source']
             roles = []
 
-            # Поиск ролей персоны в фильме
             roles.extend(['actor' for actor in film_data.get('actors', []) if actor.get('id') == str(person_id)])
             roles.extend(
                 ['director' for director in film_data.get('directors', []) if director.get('id') == str(person_id)]
             )
             roles.extend(['writer' for writer in film_data.get('writers', []) if writer.get('id') == str(person_id)])
 
-            # Добавление информации о фильме в список фильмов персоны
             person_films.append(FilmRoles(uuid=film_data['id'], roles=roles))
         return person_films
 
@@ -141,12 +138,10 @@ class PersonService(BaseService):
         for hit in search_results['hits']['hits']:
             person_id = hit['_source']['id']
 
-            # Запрос к Elasticsearch для получения фильмов, в которых участвовала персона
             films_search_results = await self.get_film_search_by_person_id(person_id)
 
             person_films = await self.get_person_films(person_id, films_search_results)
 
-            # Добавление информации о персоне в список персон
             persons.append(
                 Person(
                     uuid=person_id,
@@ -166,7 +161,7 @@ class PersonService(BaseService):
 
 @lru_cache()
 def get_persons_service(
-    cache_service: Redis = Depends(get_cache_service),
-    fts_service: AsyncElasticsearch = Depends(get_full_text_search),
-) -> PersonService:
+    cache_service: ICacheService = Depends(get_cache_service),
+    fts_service: IFullTextSearchService = Depends(get_full_text_search),
+) -> IPersonService:
     return PersonService(cache_service, fts_service)

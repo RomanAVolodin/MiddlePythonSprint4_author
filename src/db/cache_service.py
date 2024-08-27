@@ -1,7 +1,7 @@
-from redis import Redis
+from db.interfaces.interface_cache_service import ICacheService
 
-cache_service: Redis | None = None
+cache_service: ICacheService | None = None
 
 
-async def get_cache_service() -> Redis:
+async def get_cache_service() -> ICacheService:
     return cache_service

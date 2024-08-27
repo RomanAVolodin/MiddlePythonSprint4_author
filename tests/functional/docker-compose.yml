@@ -1,0 +1,59 @@
+version: '3'
+
+services:
+  elastic:
+    image: elasticsearch:8.6.2
+    restart: always
+    expose:
+      - "9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - http.cors.enabled=true
+      - http.cors.allow-origin=http://localhost:8080
+      - http.cors.allow-headers=X-Requested-With,Content-Type,Content-Length,Authorization
+    healthcheck:
+      test: curl -s http://elastic:9200 >/dev/null || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 50
+    logging:
+      driver: none
+
+  redis:
+    image: redis
+    restart: always
+    expose:
+      - "6379"
+    logging:
+      driver: none
+
+  fastapi:
+    build: ../..
+    restart: always
+    expose:
+      - "8000"
+    environment:
+      - FASTAPI__PROJECT_NAME=${FASTAPI__PROJECT_NAME}
+      - FASTAPI__SERVICE_URL=${FASTAPI__SERVICE_URL}
+      - FASTAPI__REDIS_SETTINGS__HOST=${FASTAPI__REDIS_SETTINGS__HOST}
+      - FASTAPI__REDIS_SETTINGS__PORT=${FASTAPI__REDIS_SETTINGS__PORT}
+      - FASTAPI__ELASTIC_SETTINGS__SCHEME=${FASTAPI__ELASTIC_SETTINGS__SCHEME}
+      - FASTAPI__ELASTIC_SETTINGS__HOST=${FASTAPI__ELASTIC_SETTINGS__HOST}
+      - FASTAPI__ELASTIC_SETTINGS__PORT=${FASTAPI__ELASTIC_SETTINGS__PORT}
+
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - FASTAPI__PROJECT_NAME=${FASTAPI__PROJECT_NAME}
+      - FASTAPI__REDIS_SETTINGS__HOST=${FASTAPI__REDIS_SETTINGS__HOST}
+      - FASTAPI__REDIS_SETTINGS__PORT=${FASTAPI__REDIS_SETTINGS__PORT}
+      - FASTAPI__ELASTIC_SETTINGS__SCHEME=${FASTAPI__ELASTIC_SETTINGS__SCHEME}
+      - FASTAPI__ELASTIC_SETTINGS__HOST=${FASTAPI__ELASTIC_SETTINGS__HOST}
+      - FASTAPI__ELASTIC_SETTINGS__PORT=${FASTAPI__ELASTIC_SETTINGS__PORT}
+      - FASTAPI__ELASTIC_SETTINGS__MOVIES_INDEX=${FASTAPI__ELASTIC_SETTINGS__MOVIES_INDEX}
+      - FASTAPI__ELASTIC_SETTINGS__GENRES_INDEX=${FASTAPI__ELASTIC_SETTINGS__GENRES_INDEX}
+      - FASTAPI__ELASTIC_SETTINGS__PERSONS_INDEX=${FASTAPI__ELASTIC_SETTINGS__PERSONS_INDEX}
+      - FASTAPI__ELASTIC_SETTINGS__MOVIES_INDEX_FILENAME=${FASTAPI__ELASTIC_SETTINGS__MOVIES_INDEX_FILENAME}

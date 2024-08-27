@@ -1,7 +1,7 @@
-from elasticsearch import AsyncElasticsearch
+from db.interfaces.interface_full_test_search_service import IFullTextSearchService
 
-fts_service: AsyncElasticsearch | None = None
+fts_service: IFullTextSearchService | None = None
 
 
-async def get_full_text_search() -> AsyncElasticsearch:
+async def get_full_text_search() -> IFullTextSearchService:
     return fts_service
